@@ -57,6 +57,8 @@
     .btn-reject:hover { background: rgba(200,100,80,0.2); }
     .btn-reply { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); color: #aaa; }
     .btn-reply:hover { background: rgba(255,255,255,0.1); }
+    .btn-delete { background: rgba(200,100,80,0.08); border-color: rgba(200,100,80,0.15); color: rgba(200,100,80,0.6); }
+    .btn-delete:hover { background: rgba(200,100,80,0.18); color: #c86450; }
 
     .reply-area { display: none; margin-top: 13px; }
     .reply-area.open { display: block; }
@@ -220,12 +222,15 @@
     const actionsHTML = status === 'pending'
       ? `<button class="btn btn-approve" onclick="approve('${note.id}')">✓ Approve</button>
          <button class="btn btn-reject"  onclick="reject('${note.id}')">✕ Reject</button>
-         <button class="btn btn-reply"   onclick="toggleReply('${note.id}')">↩ Reply</button>`
+         <button class="btn btn-reply"   onclick="toggleReply('${note.id}')">↩ Reply</button>
+         <button class="btn btn-delete"  onclick="deleteNote('${note.id}')">&#x1F5D1;</button>`
       : status === 'approved'
         ? `<span class="status-badge badge-approved">approved</span>
-           <button class="btn btn-reply" onclick="toggleReply('${note.id}')">${note.reply ? '↩ Edit reply' : '↩ Reply'}</button>`
+           <button class="btn btn-reply" onclick="toggleReply('${note.id}')">${note.reply ? '↩ Edit reply' : '↩ Reply'}</button>
+           <button class="btn btn-delete" onclick="deleteNote('${note.id}')">&#x1F5D1;</button>`
         : `<span class="status-badge badge-rejected">rejected</span>
-           <button class="btn btn-approve" onclick="approve('${note.id}')">Restore</button>`;
+           <button class="btn btn-approve" onclick="approve('${note.id}')">Restore</button>
+           <button class="btn btn-delete" onclick="deleteNote('${note.id}')">&#x1F5D1;</button>`;
 
     div.innerHTML = `
       <div class="queue-meta">
@@ -254,6 +259,12 @@
 
   window.reject = async (id) => {
     await sb.from('notes').update({ status: 'rejected' }).eq('id', id);
+    loadNotes(currentTab);
+  };
+
+  window.deleteNote = async (id) => {
+    if (!confirm('ลบ note นี้ถาวรเลยไหมคะ?')) return;
+    await sb.from('notes').delete().eq('id', id);
     loadNotes(currentTab);
   };
 
