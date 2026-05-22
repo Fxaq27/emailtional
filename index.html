@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emailtional</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: #1c1c1e; min-height: 100dvh; font-family: 'Outfit', sans-serif; color: #f0ebe1; overflow-x: hidden; }
+    body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: 0.04; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-size: 180px 180px; }
+
+    /* Header */
+    .site-header { padding: 50px 8vw 0; position: relative; z-index: 10; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .header-left { pointer-events: none; }
+    .site-title { font-family: 'Caveat', cursive; font-size: clamp(52px, 7vw, 80px); font-weight: 600; color: #f0ebe1; line-height: 1; letter-spacing: -1px; }
+    .site-tagline { font-size: 12px; color: #555; font-weight: 300; margin-top: 7px; letter-spacing: 0.04em; }
+
+    /* View toggle */
+    .view-toggle { display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 4px; margin-bottom: 4px; }
+    .toggle-btn { display: flex; align-items: center; gap: 6px; padding: 7px 13px; border: none; border-radius: 3px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: background 0.2s, color 0.2s; background: transparent; color: #555; }
+    .toggle-btn.active { background: #f0ebe1; color: #1c1c1e; }
+    .toggle-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* Board */
+    .board { position: relative; width: 100%; min-height: 900px; margin-top: 44px; }
+    .board.read-mode { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; padding: 40px 8vw 140px; min-height: unset; }
+    .board.read-mode .card-wrap { position: relative !important; left: auto !important; top: auto !important; width: 100% !important; transform: none !important; cursor: pointer; transition: transform 0.22s ease; }
+    .board.read-mode .card-wrap:hover { transform: translateY(-3px) !important; }
+
+    /* Card */
+    .card-wrap { position: absolute; width: 238px; cursor: grab; user-select: none; touch-action: none; }
+    .card-wrap.dragging { cursor: grabbing; }
+    .card-face { width: 100%; border-radius: 3px; padding: 20px 22px 18px; box-shadow: 0 5px 26px -5px rgba(0,0,0,0.45); cursor: pointer; transition: box-shadow 0.25s ease; }
+    .card-face:hover { box-shadow: 0 10px 36px -6px rgba(0,0,0,0.55); }
+    .card-wrap.dragging .card-face { box-shadow: 0 18px 44px -8px rgba(0,0,0,0.6); }
+    .cp .card-face { background: #f7c5c5; } .cb .card-face { background: #c5d6f7; } .co .card-face { background: #fce4b8; }
+    .cm .card-face { background: #c4f5d8; } .cy .card-face { background: #f7f1c0; } .cl .card-face { background: #dcc5f7; } .cc .card-face { background: #f4efe6; }
+    .card-label { font-size: 9.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(28,28,28,0.36); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+    .card-label::after { content: ''; flex: 1; height: 1px; background: rgba(28,28,28,0.11); }
+    .card-message { font-family: 'Caveat', cursive; font-size: 19px; line-height: 1.46; color: #1a1a1a; }
+    .card-meta { margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .card-author { font-family: 'Caveat', cursive; font-size: 13.5px; color: rgba(28,28,28,0.48); }
+    .card-date { font-size: 10px; color: rgba(28,28,28,0.28); letter-spacing: 0.05em; }
+    .reply-dot { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,28,28,0.38); font-family: 'Outfit', sans-serif; }
+    .reply-dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: rgba(28,28,28,0.3); flex-shrink: 0; }
+
+    /* Skeleton loader */
+    @keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+    .skeleton { background: linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 75%); background-size: 800px 100%; animation: shimmer 1.4s infinite; border-radius: 3px; }
+    .card-skeleton { width: 238px; height: 180px; }
+
+    /* Note modal */
+    .note-modal { position: fixed; inset: 0; z-index: 850; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+    .note-modal.open { opacity: 1; pointer-events: all; }
+    .note-modal-bg { position: absolute; inset: 0; background: rgba(8,8,8,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .note-modal-card { position: relative; z-index: 1; width: min(520px, 92vw); max-height: 85dvh; overflow-y: auto; border-radius: 3px; padding: 32px 34px 28px; box-shadow: 0 28px 60px rgba(0,0,0,0.55); transform: scale(0.94) translateY(10px); transition: transform 0.32s cubic-bezier(0.16,1,0.3,1); }
+    .note-modal.open .note-modal-card { transform: scale(1) translateY(0); }
+    .note-modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 18px; color: rgba(28,28,28,0.28); cursor: pointer; transition: color 0.18s; line-height: 1; }
+    .note-modal-close:hover { color: rgba(28,28,28,0.65); }
+    .modal-label { font-size: 9.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(28,28,28,0.36); margin-bottom: 14px; display: flex; align-items: center; gap: 7px; }
+    .modal-label::after { content: ''; flex: 1; height: 1px; background: rgba(28,28,28,0.11); }
+    .modal-message { font-family: 'Caveat', cursive; font-size: 22px; line-height: 1.5; color: #1a1a1a; }
+    .modal-meta { display: flex; justify-content: space-between; margin-top: 16px; }
+    .modal-author { font-family: 'Caveat', cursive; font-size: 15px; color: rgba(28,28,28,0.48); }
+    .modal-date { font-size: 10px; color: rgba(28,28,28,0.3); letter-spacing: 0.05em; }
+    .modal-divider { height: 1px; background: rgba(28,28,28,0.1); margin: 20px 0; }
+    .modal-reply-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.13em; color: rgba(28,28,28,0.3); margin-bottom: 10px; }
+    .modal-reply-text { font-family: 'Caveat', cursive; font-size: 20px; font-style: italic; line-height: 1.52; color: rgba(28,28,28,0.78); }
+    .modal-reply-sig { font-family: 'Caveat', cursive; font-size: 14px; color: rgba(28,28,28,0.42); margin-top: 12px; }
+
+    /* Write button */
+    .write-btn { position: fixed; bottom: 30px; right: 30px; background: #f0ebe1; color: #1c1c1e; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; padding: 13px 22px; border: none; border-radius: 2px; cursor: pointer; letter-spacing: 0.04em; box-shadow: 0 4px 24px rgba(0,0,0,0.38); transition: transform 0.24s cubic-bezier(0.16,1,0.3,1), box-shadow 0.24s ease; z-index: 500; }
+    .write-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,0.48); }
+    .write-btn:active { transform: scale(0.97); }
+
+    /* Submit overlay */
+    .overlay { position: fixed; inset: 0; background: rgba(8,8,8,0.74); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); z-index: 800; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.28s ease; }
+    .overlay.open { opacity: 1; pointer-events: all; }
+    .form-card { background: #f4efe6; border-radius: 3px; padding: 34px 36px 28px; width: min(490px, 92vw); box-shadow: 0 28px 64px rgba(0,0,0,0.55); transform: scale(0.93) translateY(14px); transition: transform 0.36s cubic-bezier(0.16,1,0.3,1); position: relative; }
+    .overlay.open .form-card { transform: scale(1) translateY(0); }
+    .close-btn { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 19px; color: rgba(28,28,28,0.26); cursor: pointer; line-height: 1; transition: color 0.18s; }
+    .close-btn:hover { color: rgba(28,28,28,0.6); }
+    .form-meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; color: rgba(28,28,28,0.34); margin-bottom: 4px; }
+    .form-to-line { font-family: 'Caveat', cursive; font-size: 24px; color: #1a1a1a; margin-bottom: 18px; }
+    textarea { width: 100%; min-height: 114px; background: rgba(28,28,28,0.05); border: 1px solid rgba(28,28,28,0.11); border-radius: 2px; padding: 11px 12px; font-family: 'Caveat', cursive; font-size: 20px; color: #1a1a1a; resize: none; outline: none; transition: border-color 0.18s; line-height: 1.44; }
+    textarea::placeholder { color: rgba(28,28,28,0.26); }
+    textarea:focus { border-color: rgba(28,28,28,0.26); }
+    .char-count { font-size: 10px; color: rgba(28,28,28,0.28); text-align: right; margin-top: 4px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 13px; }
+    .form-field { display: flex; flex-direction: column; gap: 5px; }
+    input[type="text"], input[type="email"] { background: rgba(28,28,28,0.05); border: 1px solid rgba(28,28,28,0.11); border-radius: 2px; padding: 9px 11px; font-family: 'Outfit', sans-serif; font-size: 13px; color: #1a1a1a; outline: none; transition: border-color 0.18s; }
+    input::placeholder { color: rgba(28,28,28,0.26); }
+    input:focus { border-color: rgba(28,28,28,0.26); }
+    .form-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .form-hint { font-size: 10px; color: rgba(28,28,28,0.3); max-width: 150px; line-height: 1.5; }
+    .submit-btn { background: #1c1c1e; color: #f0ebe1; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; padding: 12px 22px; border: none; border-radius: 2px; cursor: pointer; letter-spacing: 0.05em; transition: opacity 0.18s, transform 0.18s; }
+    .submit-btn:hover { opacity: 0.8; }
+    .submit-btn:active { transform: scale(0.97); }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .form-success { text-align: center; padding: 20px 0 8px; }
+    .form-success-title { font-family: 'Caveat', cursive; font-size: 28px; color: #1a1a1a; margin-bottom: 8px; }
+    .form-success-sub { font-size: 12px; color: rgba(28,28,28,0.5); }
+
+    /* Mobile */
+    @media (max-width: 600px) {
+      .site-header { padding: 36px 5vw 0; flex-direction: column; align-items: flex-start; }
+      .view-toggle { align-self: flex-start; }
+      .board { display: grid !important; grid-template-columns: 1fr !important; gap: 14px !important; padding: 28px 5vw 120px !important; min-height: unset !important; }
+      .board .card-wrap { position: relative !important; left: auto !important; top: auto !important; width: 100% !important; transform: rotate(var(--rot)) !important; cursor: pointer !important; }
+      .board.read-mode .card-wrap { transform: none !important; }
+      .write-btn { right: 16px; bottom: 20px; }
+      .form-row { grid-template-columns: 1fr; }
+      .form-card { padding: 28px 22px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-left">
+    <h1 class="site-title">Emailtional</h1>
+    <p class="site-tagline">notes for the alignment. answered honestly.</p>
+  </div>
+  <div class="view-toggle">
+    <button class="toggle-btn active" id="btnBoard">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+      Board
+    </button>
+    <button class="toggle-btn" id="btnRead">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="10" y2="12"/></svg>
+      Read
+    </button>
+  </div>
+</header>
+
+<main class="board" id="board"></main>
+
+<button class="write-btn" id="writeBtn">write a note &#x2197;</button>
+
+<!-- Note modal -->
+<div class="note-modal" id="noteModal">
+  <div class="note-modal-bg" id="noteModalBg"></div>
+  <div class="note-modal-card" id="noteModalCard">
+    <button class="note-modal-close" id="noteModalClose">&#x2715;</button>
+    <div class="modal-label">The Alignment</div>
+    <div class="modal-message" id="modalMessage"></div>
+    <div class="modal-meta">
+      <span class="modal-author" id="modalAuthor"></span>
+      <span class="modal-date" id="modalDate"></span>
+    </div>
+    <div id="modalReplySection" style="display:none">
+      <div class="modal-divider"></div>
+      <div class="modal-reply-label">The Alignment replied</div>
+      <div class="modal-reply-text" id="modalReplyText"></div>
+      <div class="modal-reply-sig">&#x2014; The Alignment</div>
+    </div>
+  </div>
+</div>
+
+<!-- Submit overlay -->
+<div class="overlay" id="overlay">
+  <div class="form-card">
+    <button class="close-btn" id="closeBtn">&#x2715;</button>
+    <div id="formContent">
+      <div class="form-meta-label">to</div>
+      <div class="form-to-line">dear The Alignment,</div>
+      <textarea id="msgInput" placeholder="write whatever's on your mind..." maxlength="300"></textarea>
+      <div class="char-count"><span id="charCount">0</span> / 300</div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-meta-label">from</label>
+          <input type="text" id="nameInput" placeholder="anonymous" />
+        </div>
+        <div class="form-field">
+          <label class="form-meta-label">email (optional)</label>
+          <input type="email" id="emailInput" placeholder="if you want a reply" />
+        </div>
+      </div>
+      <div class="form-footer">
+        <p class="form-hint">only The Alignment sees your email</p>
+        <button class="submit-btn" id="submitBtn">send it &#x2192;</button>
+      </div>
+    </div>
+    <div id="formSuccess" style="display:none" class="form-success">
+      <div class="form-success-title">sent.</div>
+      <div class="form-success-sub">your note is on its way &#x2192;</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────
+  const SUPABASE_URL  = 'https://spaypfwpspmlvqsqffog.supabase.co';
+  const SUPABASE_ANON = 'sb_publishable_2wRWI7sPa1mljwL4Fyh-Ew_08kPQN4m';
+  // ────────────────────────────────────────────────────
+
+  const { createClient } = supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  const COLOR_CLASSES = ['cp','cb','co','cm','cy','cl','cc'];
+  const CARD_BG       = ['#f7c5c5','#c5d6f7','#fce4b8','#c4f5d8','#f7f1c0','#dcc5f7','#f4efe6'];
+  const ROTATIONS     = [-7, 3, -4.5, 6, -2, 8, -5, 4, -6.5, 2.5, -3, 7];
+  const board         = document.getElementById('board');
+
+  // ── Load notes ──
+  async function loadNotes() {
+    // Show skeletons
+    for (let i = 0; i < 6; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'card-wrap skeleton card-skeleton';
+      sk.style.position = 'relative';
+      board.appendChild(sk);
+    }
+
+    const { data, error } = await sb
+      .from('notes')
+      .select('*')
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false });
+
+    board.innerHTML = '';
+
+    if (error || !data?.length) {
+      board.innerHTML = `<div style="position:relative;color:#444;font-size:13px;padding:60px 8vw;letter-spacing:0.04em;">no notes yet. be the first ↗</div>`;
+      return;
+    }
+
+    data.forEach((note, i) => board.appendChild(buildCard(note, i)));
+    document.fonts.ready.then(positionCards);
+  }
+
+  // ── Build card ──
+  function buildCard(note, i) {
+    const colorIdx = i % COLOR_CLASSES.length;
+    const wrap = document.createElement('div');
+    wrap.className = `card-wrap ${COLOR_CLASSES[colorIdx]}`;
+    wrap.style.setProperty('--rot', ROTATIONS[i % ROTATIONS.length] + 'deg');
+    wrap.style.transform = `rotate(${ROTATIONS[i % ROTATIONS.length]}deg)`;
+    wrap.style.zIndex = i + 1;
+
+    const face = document.createElement('div');
+    face.className = 'card-face';
+
+    const d = new Date(note.created_at);
+    const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+
+    face.innerHTML = `
+      <div class="card-label">The Alignment</div>
+      <div class="card-message">${escHtml(note.message)}</div>
+      <div class="card-meta">
+        <span class="card-author">— ${escHtml(note.sender_name)}</span>
+        <span class="card-date">${dateStr}</span>
+      </div>
+      ${note.reply ? `<div class="reply-dot">replied</div>` : ''}
+    `;
+
+    face.addEventListener('click', () => {
+      if (hasMoved) return;
+      openModal(note, CARD_BG[colorIdx]);
+    });
+
+    wrap.appendChild(face);
+    return wrap;
+  }
+
+  // ── Position cards (board mode) ──
+  function positionCards() {
+    if (isReadMode) return;
+    const bw   = board.offsetWidth;
+    const cardW = 238;
+    const cols  = Math.max(2, Math.floor(bw / 300));
+    const colW  = bw / cols;
+    const seed  = [0.18, 0.55, 0.82, 0.28, 0.62, 0.12, 0.72, 0.38];
+    document.querySelectorAll('.card-wrap').forEach((wrap, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const jx = (seed[i % seed.length] - 0.5) * 50;
+      const jy = (seed[(i+3) % seed.length] - 0.5) * 30;
+      wrap.style.left = Math.max(10, col * colW + (colW - cardW) / 2 + jx) + 'px';
+      wrap.style.top  = Math.max(10, row * 300 + jy) + 'px';
+    });
+  }
+
+  // ── Drag ──
+  let activeWrap = null, startMx = 0, startMy = 0, origLeft = 0, origTop = 0;
+  let hasMoved = false, zCounter = 100;
+
+  function ptr(e) { return e.touches ? {x:e.touches[0].clientX,y:e.touches[0].clientY} : {x:e.clientX,y:e.clientY}; }
+
+  board.addEventListener('mousedown', dragStart);
+  board.addEventListener('touchstart', dragStart, {passive:true});
+
+  function dragStart(e) {
+    if (isReadMode) return;
+    const wrap = e.target.closest('.card-wrap');
+    if (!wrap) return;
+    const p = ptr(e);
+    startMx = p.x; startMy = p.y;
+    origLeft = parseFloat(wrap.style.left)||0;
+    origTop  = parseFloat(wrap.style.top)||0;
+    hasMoved = false; activeWrap = wrap;
+    zCounter++; wrap.style.zIndex = zCounter;
+  }
+
+  document.addEventListener('mousemove', dragMove);
+  document.addEventListener('touchmove', dragMove, {passive:false});
+
+  function dragMove(e) {
+    if (!activeWrap) return;
+    if (e.cancelable) e.preventDefault();
+    const p = ptr(e), dx = p.x - startMx, dy = p.y - startMy;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) { hasMoved = true; activeWrap.classList.add('dragging'); }
+    if (hasMoved) {
+      activeWrap.style.left = (origLeft + dx) + 'px';
+      activeWrap.style.top  = (origTop  + dy) + 'px';
+    }
+  }
+
+  document.addEventListener('mouseup', () => { if (activeWrap) { activeWrap.classList.remove('dragging'); } activeWrap = null; });
+  document.addEventListener('touchend', () => { if (activeWrap) activeWrap.classList.remove('dragging'); activeWrap = null; });
+
+  // ── Note modal ──
+  const noteModal     = document.getElementById('noteModal');
+  const noteModalCard = document.getElementById('noteModalCard');
+  const noteModalBg   = document.getElementById('noteModalBg');
+  const noteModalClose= document.getElementById('noteModalClose');
+
+  function openModal(note, bg) {
+    noteModalCard.style.background = bg;
+    document.getElementById('modalMessage').textContent  = note.message;
+    document.getElementById('modalAuthor').textContent   = `— ${note.sender_name}`;
+    const d = new Date(note.created_at);
+    document.getElementById('modalDate').textContent = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+    const rs = document.getElementById('modalReplySection');
+    if (note.reply) { document.getElementById('modalReplyText').textContent = note.reply; rs.style.display = ''; }
+    else rs.style.display = 'none';
+    noteModal.classList.add('open');
+  }
+
+  const closeModal = () => noteModal.classList.remove('open');
+  noteModalClose.addEventListener('click', closeModal);
+  noteModalBg.addEventListener('click', closeModal);
+
+  // ── View toggle ──
+  let isReadMode = false;
+  document.getElementById('btnBoard').addEventListener('click', () => {
+    if (!isReadMode) return;
+    isReadMode = false;
+    board.classList.remove('read-mode');
+    document.getElementById('btnBoard').classList.add('active');
+    document.getElementById('btnRead').classList.remove('active');
+    document.querySelectorAll('.card-wrap').forEach((w, i) => {
+      if (w.dataset.left) w.style.left = w.dataset.left;
+      if (w.dataset.top)  w.style.top  = w.dataset.top;
+      w.style.transform = `rotate(${ROTATIONS[i % ROTATIONS.length]}deg)`;
+    });
+  });
+  document.getElementById('btnRead').addEventListener('click', () => {
+    if (isReadMode) return;
+    isReadMode = true;
+    board.classList.add('read-mode');
+    document.getElementById('btnRead').classList.add('active');
+    document.getElementById('btnBoard').classList.remove('active');
+    document.querySelectorAll('.card-wrap').forEach(w => { w.dataset.left = w.style.left; w.dataset.top = w.style.top; });
+  });
+
+  // ── Submit form ──
+  const overlay  = document.getElementById('overlay');
+  const writeBtn = document.getElementById('writeBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const msgInput = document.getElementById('msgInput');
+  const submitBtn= document.getElementById('submitBtn');
+
+  writeBtn.addEventListener('click', () => { overlay.classList.add('open'); setTimeout(() => msgInput.focus(), 380); });
+  const closeOverlay = () => { overlay.classList.remove('open'); resetForm(); };
+  closeBtn.addEventListener('click', closeOverlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeOverlay(); closeModal(); } });
+  msgInput.addEventListener('input', () => { document.getElementById('charCount').textContent = msgInput.value.length; });
+
+  function resetForm() {
+    setTimeout(() => {
+      document.getElementById('formContent').style.display = '';
+      document.getElementById('formSuccess').style.display = 'none';
+      msgInput.value = ''; document.getElementById('charCount').textContent = '0';
+      document.getElementById('nameInput').value = '';
+      document.getElementById('emailInput').value = '';
+    }, 400);
+  }
+
+  submitBtn.addEventListener('click', async () => {
+    const msg = msgInput.value.trim();
+    if (!msg) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'sending...';
+
+    const { error } = await sb.from('notes').insert({
+      message:      msg,
+      sender_name:  document.getElementById('nameInput').value.trim() || 'anonymous',
+      sender_email: document.getElementById('emailInput').value.trim() || null,
+      status:       'pending',
+    });
+
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'send it &#x2192;';
+
+    if (!error) {
+      document.getElementById('formContent').style.display = 'none';
+      document.getElementById('formSuccess').style.display = '';
+      setTimeout(closeOverlay, 2200);
+    }
+  });
+
+  // ── Realtime: new approved notes appear live ──
+  sb.channel('public-notes')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notes', filter: 'status=eq.approved' },
+      payload => {
+        const exists = document.querySelector(`[data-note-id="${payload.new.id}"]`);
+        if (!exists) {
+          const count = document.querySelectorAll('.card-wrap').length;
+          const card  = buildCard(payload.new, count);
+          board.appendChild(card);
+          positionCards();
+        }
+      }
+    ).subscribe();
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadNotes();
+</script>
+</body>
+</html>
