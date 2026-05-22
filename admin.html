@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emailtional — inbox</title>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: #1a1a1c; min-height: 100dvh; font-family: 'Outfit', sans-serif; color: #f0ebe1; }
+
+    /* Login */
+    .login-screen { position: fixed; inset: 0; background: #1a1a1c; display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .login-box { width: min(360px, 90vw); }
+    .login-title { font-family: 'Caveat', cursive; font-size: 40px; font-weight: 600; color: #f0ebe1; margin-bottom: 4px; }
+    .login-sub { font-size: 12px; color: #555; margin-bottom: 30px; letter-spacing: 0.04em; }
+    .login-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .login-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
+    .login-input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 2px; padding: 12px 14px; font-family: 'Outfit', sans-serif; font-size: 14px; color: #f0ebe1; outline: none; transition: border-color 0.18s; }
+    .login-input:focus { border-color: rgba(255,255,255,0.2); }
+    .login-btn { width: 100%; background: #f0ebe1; color: #1a1a1c; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; padding: 13px; border: none; border-radius: 2px; cursor: pointer; letter-spacing: 0.05em; margin-top: 4px; transition: opacity 0.18s; }
+    .login-btn:hover { opacity: 0.85; }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error { font-size: 11px; color: #c86450; margin-top: 8px; min-height: 16px; }
+
+    /* App */
+    .app { display: none; flex-direction: column; min-height: 100dvh; }
+    .app.visible { display: flex; }
+
+    .app-header { padding: 28px 32px 0; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+    .app-title { font-family: 'Caveat', cursive; font-size: 30px; color: #f0ebe1; }
+    .app-sub { font-size: 11px; color: #555; margin-top: 2px; }
+    .logout-btn { background: none; border: 1px solid rgba(255,255,255,0.1); color: #666; font-family: 'Outfit', sans-serif; font-size: 11px; padding: 6px 12px; border-radius: 2px; cursor: pointer; transition: color 0.18s, border-color 0.18s; white-space: nowrap; }
+    .logout-btn:hover { color: #aaa; border-color: rgba(255,255,255,0.2); }
+
+    .tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.06); padding: 0 32px; overflow-x: auto; }
+    .tab { padding: 13px 0; margin-right: 24px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #555; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.18s, border-color 0.18s; background: none; border-left: none; border-right: none; border-top: none; white-space: nowrap; }
+    .tab.active { color: #f0ebe1; border-bottom-color: #f0ebe1; }
+
+    .content { flex: 1; padding: 24px 32px 80px; max-width: 680px; width: 100%; }
+
+    /* Queue item */
+    .queue-item { border: 1px solid rgba(255,255,255,0.07); border-radius: 3px; padding: 18px 20px; margin-bottom: 12px; background: rgba(255,255,255,0.02); }
+    .queue-meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 8px; }
+    .queue-sender { font-size: 12px; color: #888; }
+    .queue-email { font-size: 10px; color: #555; margin-top: 2px; }
+    .queue-date { font-size: 10px; color: #444; white-space: nowrap; }
+    .queue-msg { font-family: 'Caveat', cursive; font-size: 19px; color: #d0cbc3; line-height: 1.45; margin-bottom: 14px; }
+    .queue-reply-preview { font-family: 'Caveat', cursive; font-size: 15px; font-style: italic; color: #777; margin-bottom: 12px; padding: 9px 13px; border-left: 2px solid rgba(255,255,255,0.08); }
+
+    .queue-actions { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .btn { padding: 7px 13px; border-radius: 2px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: background 0.18s; border: 1px solid transparent; }
+    .btn-approve { background: rgba(120,200,130,0.12); border-color: rgba(120,200,130,0.22); color: #7bc882; }
+    .btn-approve:hover { background: rgba(120,200,130,0.22); }
+    .btn-reject { background: rgba(200,100,80,0.1); border-color: rgba(200,100,80,0.18); color: #c86450; }
+    .btn-reject:hover { background: rgba(200,100,80,0.2); }
+    .btn-reply { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); color: #aaa; }
+    .btn-reply:hover { background: rgba(255,255,255,0.1); }
+
+    .reply-area { display: none; margin-top: 13px; }
+    .reply-area.open { display: block; }
+    .reply-textarea { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 2px; padding: 11px 12px; font-family: 'Caveat', cursive; font-size: 18px; color: #f0ebe1; resize: none; outline: none; min-height: 86px; transition: border-color 0.18s; line-height: 1.45; }
+    .reply-textarea:focus { border-color: rgba(255,255,255,0.22); }
+    .reply-send { margin-top: 8px; padding: 9px 18px; background: #f0ebe1; color: #1a1a1c; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; border: none; border-radius: 2px; cursor: pointer; transition: opacity 0.18s; }
+    .reply-send:hover { opacity: 0.82; }
+    .reply-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .status-badge { display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 10px; }
+    .badge-approved { background: rgba(120,200,130,0.15); color: #7bc882; }
+    .badge-rejected { background: rgba(200,100,80,0.12); color: #c86450; }
+
+    .empty { padding: 48px 0; text-align: center; color: #444; font-size: 13px; }
+
+    @media (max-width: 500px) {
+      .app-header { padding: 20px 18px 0; padding-bottom: 14px; }
+      .tabs { padding: 0 18px; }
+      .content { padding: 20px 18px 80px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-title">inbox</div>
+    <div class="login-sub">emailtional admin</div>
+    <div class="login-field">
+      <label class="login-label">email</label>
+      <input type="email" class="login-input" id="emailInput" placeholder="your@email.com" />
+    </div>
+    <div class="login-field">
+      <label class="login-label">password</label>
+      <input type="password" class="login-input" id="pwInput" placeholder="••••••••" />
+    </div>
+    <button class="login-btn" id="loginBtn">enter →</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <div class="app-header">
+    <div>
+      <div class="app-title">inbox</div>
+      <div class="app-sub" id="userEmail"></div>
+    </div>
+    <button class="logout-btn" id="logoutBtn">sign out</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tabPending">Pending <span id="pendingCount"></span></button>
+    <button class="tab" id="tabApproved">Approved <span id="approvedCount"></span></button>
+    <button class="tab" id="tabRejected">Rejected</button>
+  </div>
+
+  <div class="content" id="content"></div>
+</div>
+
+<script>
+  // ── Config ───────────────────────────────────────
+  const SUPABASE_URL  = 'https://spaypfwpspmlvqsqffog.supabase.co';
+  const SUPABASE_ANON = 'sb_publishable_2wRWI7sPa1mljwL4Fyh-Ew_08kPQN4m';
+  // ─────────────────────────────────────────────────
+
+  const { createClient } = supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  const loginScreen = document.getElementById('loginScreen');
+  const app         = document.getElementById('app');
+
+  // ── Check existing session ──
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (session) showApp(session.user.email);
+  });
+
+  // ── Login ──
+  const loginBtn  = document.getElementById('loginBtn');
+  const loginError= document.getElementById('loginError');
+
+  async function doLogin() {
+    const email = document.getElementById('emailInput').value.trim();
+    const pw    = document.getElementById('pwInput').value;
+    if (!email || !pw) { loginError.textContent = 'fill in both fields'; return; }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'signing in...';
+
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'enter →';
+
+    if (error) { loginError.textContent = 'wrong email or password'; return; }
+    showApp(data.user.email);
+  }
+
+  loginBtn.addEventListener('click', doLogin);
+  document.getElementById('pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  function showApp(email) {
+    loginScreen.style.display = 'none';
+    app.classList.add('visible');
+    document.getElementById('userEmail').textContent = email;
+    loadNotes('pending');
+  }
+
+  // ── Logout ──
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    location.reload();
+  });
+
+  // ── Tabs ──
+  let currentTab = 'pending';
+  ['tabPending','tabApproved','tabRejected'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      currentTab = id.replace('tab','').toLowerCase();
+      loadNotes(currentTab);
+    });
+  });
+
+  // ── Load notes ──
+  async function loadNotes(status) {
+    const content = document.getElementById('content');
+    content.innerHTML = '<div class="empty">loading...</div>';
+
+    const { data, error } = await sb.from('notes').select('*')
+      .eq('status', status)
+      .order('created_at', { ascending: false });
+
+    // Update counts
+    const [{ count: pc }, { count: ac }] = await Promise.all([
+      sb.from('notes').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      sb.from('notes').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+    ]);
+    document.getElementById('pendingCount').textContent  = pc ? `(${pc})` : '';
+    document.getElementById('approvedCount').textContent = ac ? `(${ac})` : '';
+
+    if (error || !data?.length) {
+      content.innerHTML = `<div class="empty">no ${status} notes</div>`;
+      return;
+    }
+
+    content.innerHTML = '';
+    data.forEach(note => content.appendChild(buildItem(note, status)));
+  }
+
+  // ── Build item ──
+  function buildItem(note, status) {
+    const div = document.createElement('div');
+    div.className = 'queue-item';
+
+    const d = new Date(note.created_at);
+    const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+
+    const actionsHTML = status === 'pending'
+      ? `<button class="btn btn-approve" onclick="approve('${note.id}')">✓ Approve</button>
+         <button class="btn btn-reject"  onclick="reject('${note.id}')">✕ Reject</button>
+         <button class="btn btn-reply"   onclick="toggleReply('${note.id}')">↩ Reply</button>`
+      : status === 'approved'
+        ? `<span class="status-badge badge-approved">approved</span>
+           <button class="btn btn-reply" onclick="toggleReply('${note.id}')">${note.reply ? '↩ Edit reply' : '↩ Reply'}</button>`
+        : `<span class="status-badge badge-rejected">rejected</span>
+           <button class="btn btn-approve" onclick="approve('${note.id}')">Restore</button>`;
+
+    div.innerHTML = `
+      <div class="queue-meta">
+        <div>
+          <div class="queue-sender">— ${esc(note.sender_name)}</div>
+          ${note.sender_email ? `<div class="queue-email">${esc(note.sender_email)}</div>` : ''}
+        </div>
+        <div class="queue-date">${dateStr}</div>
+      </div>
+      <div class="queue-msg">${esc(note.message)}</div>
+      ${note.reply ? `<div class="queue-reply-preview">${esc(note.reply)}</div>` : ''}
+      <div class="queue-actions">${actionsHTML}</div>
+      <div class="reply-area" id="reply-${note.id}">
+        <textarea class="reply-textarea" id="rt-${note.id}" placeholder="write your reply...">${note.reply || ''}</textarea>
+        <button class="reply-send" onclick="sendReply('${note.id}')">send reply →</button>
+      </div>
+    `;
+    return div;
+  }
+
+  // ── Actions ──
+  window.approve = async (id) => {
+    await sb.from('notes').update({ status: 'approved' }).eq('id', id);
+    loadNotes(currentTab);
+  };
+
+  window.reject = async (id) => {
+    await sb.from('notes').update({ status: 'rejected' }).eq('id', id);
+    loadNotes(currentTab);
+  };
+
+  window.toggleReply = (id) => {
+    const area = document.getElementById(`reply-${id}`);
+    area.classList.toggle('open');
+    if (area.classList.contains('open')) document.getElementById(`rt-${id}`).focus();
+  };
+
+  window.sendReply = async (id) => {
+    const text = document.getElementById(`rt-${id}`).value.trim();
+    if (!text) return;
+    const btn = document.querySelector(`#reply-${id} .reply-send`);
+    btn.disabled = true; btn.textContent = 'sending...';
+    await sb.from('notes').update({
+      reply: text,
+      replied_at: new Date().toISOString(),
+      status: 'approved'
+    }).eq('id', id);
+    btn.disabled = false; btn.textContent = 'sent ✓';
+    setTimeout(() => loadNotes(currentTab), 800);
+  };
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
