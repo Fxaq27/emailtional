@@ -163,9 +163,26 @@
     }
     .story-overlay.open { opacity: 1; pointer-events: all; }
     .story-overlay img { max-width: 100%; max-height: 75dvh; border-radius: 3px; }
+    .story-actions {
+      width: min(100%, 320px); display: grid; grid-template-columns: 1fr;
+      gap: 8px; margin-top: 16px;
+    }
+    .story-action-btn,
+    .story-action-link {
+      width: 100%; display: flex; align-items: center; justify-content: center;
+      min-height: 42px; border-radius: 2px; font-family: 'Outfit', sans-serif;
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      text-decoration: none; cursor: pointer;
+    }
+    .story-action-btn { border: none; background: #f0ebe1; color: #1c1c1e; }
+    .story-action-link {
+      border: 1px solid rgba(240,235,225,0.22); color: rgba(240,235,225,0.72);
+      background: transparent;
+    }
     .story-hint {
       font-family: 'Outfit', sans-serif; font-size: 12px; color: #666;
-      letter-spacing: 0.05em; margin-top: 16px; text-align: center;
+      letter-spacing: 0.02em; margin-top: 12px; text-align: center;
+      max-width: 320px; line-height: 1.5;
     }
     .story-close {
       position: absolute; top: 20px; right: 20px;
@@ -202,7 +219,11 @@
 <div class="story-overlay" id="storyOverlay">
   <button class="story-close" id="storyClose">&#x2715;</button>
   <img id="storyImg" src="" alt="story">
-  <p class="story-hint">hold the image → Save to Photos</p>
+  <div class="story-actions">
+    <button class="story-action-btn" id="storyShareBtn" type="button">share / save image</button>
+    <a class="story-action-link" id="storyOpenLink" href="#" target="_blank" rel="noopener">open full image</a>
+  </div>
+  <p class="story-hint">ถ้า share sheet ไม่ขึ้น ให้เปิดรูปเต็มแล้วกดค้างเพื่อ Save to Photos</p>
 </div>
 
 <!-- Note modal -->
@@ -425,38 +446,26 @@
   // ── Save as IG Story ──
   let _currentNote = null;
   let _currentBg   = '#f4efe6';
+  let _currentStoryUrl = '';
+  let _currentStoryFile = null;
 
   document.getElementById('saveStoryBtn').addEventListener('click', () => saveStory(_currentNote, _currentBg));
+  document.getElementById('storyShareBtn').addEventListener('click', async () => {
+    if (!_currentStoryFile || !navigator.canShare?.({ files: [_currentStoryFile] })) return;
+    await navigator.share({
+      files: [_currentStoryFile],
+      title: 'The Alignment story'
+    });
+  });
 
-  function saveStory(note, bg) {
+  async function saveStory(note, bg) {
     const btn = document.getElementById('saveStoryBtn');
     btn.textContent = 'generating...';
 
-    const W   = 1080;
-    const PAD = 100;
-    const FQ  = 64;   // question font size
-    const FR  = 56;   // reply font size
-    const LHQ = Math.round(FQ * 1.4);
-    const LHR = Math.round(FR * 1.4);
-    const BOTTOM_PAD = 140;
-
-    // ── Step 1: dry-run on tall canvas to get exact final y ──
-    const dry = document.createElement('canvas');
-    dry.width = W; dry.height = 9999;
-    const dCtx = dry.getContext('2d');
-
-    dCtx.font = `${FQ}px Georgia, serif`;
-    let dy = 220;
-    dy = wrapText(dCtx, note.message, PAD, dy, W - PAD * 2, LHQ);
-    dy += 50; // sender
-    dy += 90; // divider gap
-    dy += 90; // reply start
-    dCtx.font = `italic ${FR}px Georgia, serif`;
-    dy = wrapText(dCtx, note.reply, PAD, dy, W - PAD * 2, LHR);
-    dy += 70;  // signature line
-    dy += BOTTOM_PAD;
-
-    const H = Math.ceil(dy);
+    const W = 1080;
+    const H = 1920;
+    const layout = fitStoryLayout(note, W, H);
+    const { pad, fontQuestion, fontReply, fontMeta, lineQuestion, lineReply, senderGap, dividerGap, replyGap, signatureGap } = layout;
 
     // ── Step 2: draw on correctly-sized canvas ──
     const cv  = document.createElement('canvas');
@@ -470,74 +479,161 @@
     // Label
     ctx.fillStyle = 'rgba(28,28,28,0.28)';
     ctx.font = '28px Arial, sans-serif';
-    ctx.fillText('THE ALIGNMENT', PAD, 155);
+    ctx.fillText('THE ALIGNMENT', pad, 155);
 
     // Question
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = `${FQ}px Georgia, serif`;
-    let y = wrapText(ctx, note.message, PAD, 220, W - PAD * 2, LHQ);
+    ctx.font = `${fontQuestion}px Georgia, serif`;
+    let y = wrapText(ctx, note.message, pad, 220, W - pad * 2, lineQuestion);
 
     // Sender
     ctx.fillStyle = 'rgba(28,28,28,0.38)';
-    ctx.font = '34px Georgia, serif';
-    y += 46;
-    ctx.fillText(`— ${note.sender_name}`, PAD, y);
+    ctx.font = `${fontMeta}px Georgia, serif`;
+    y += senderGap;
+    ctx.fillText(`— ${note.sender_name}`, pad, y);
 
     // Divider
-    const divY = y + 80;
+    const divY = y + dividerGap;
     ctx.strokeStyle = 'rgba(28,28,28,0.12)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(PAD, divY);
-    ctx.lineTo(W - PAD, divY);
+    ctx.moveTo(pad, divY);
+    ctx.lineTo(W - pad, divY);
     ctx.stroke();
 
     // Reply
     ctx.fillStyle = 'rgba(28,28,28,0.68)';
-    ctx.font = `italic ${FR}px Georgia, serif`;
-    let y2 = wrapText(ctx, note.reply, PAD, divY + 88, W - PAD * 2, LHR);
+    ctx.font = `italic ${fontReply}px Georgia, serif`;
+    let y2 = wrapText(ctx, note.reply, pad, divY + replyGap, W - pad * 2, lineReply);
 
     // Signature
     ctx.fillStyle = 'rgba(28,28,28,0.32)';
-    ctx.font = '34px Georgia, serif';
-    ctx.fillText('— The Alignment', PAD, y2 + 58);
+    ctx.font = `${fontMeta}px Georgia, serif`;
+    ctx.fillText('— The Alignment', pad, y2 + signatureGap);
 
-    const dataUrl = cv.toDataURL('image/png');
+    const blob = await new Promise(resolve => cv.toBlob(resolve, 'image/png'));
+    const file = new File([blob], 'the-alignment-story.png', { type: 'image/png' });
+    if (_currentStoryUrl) URL.revokeObjectURL(_currentStoryUrl);
+    _currentStoryUrl = URL.createObjectURL(blob);
+    _currentStoryFile = file;
+
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isMobile) {
-      document.getElementById('storyImg').src = dataUrl;
+      const shareBtn = document.getElementById('storyShareBtn');
+      const openLink = document.getElementById('storyOpenLink');
+      document.getElementById('storyImg').src = _currentStoryUrl;
+      openLink.href = _currentStoryUrl;
+      openLink.download = 'the-alignment-story.png';
+      shareBtn.style.display = navigator.canShare?.({ files: [file] }) ? '' : 'none';
       document.getElementById('storyOverlay').classList.add('open');
     } else {
       const a = document.createElement('a');
       a.download = 'the-alignment-story.png';
-      a.href = dataUrl; a.click();
+      a.href = _currentStoryUrl; a.click();
     }
     btn.innerHTML = 'save as story ↓';
   }
 
-  // Thai-safe word wrap with char-by-char fallback
-  function wrapText(ctx, text, x, y, maxW, lineH) {
-    const tokens = text.split(' ');
+  function fitStoryLayout(note, width, height) {
+    const dry = document.createElement('canvas');
+    dry.width = width;
+    dry.height = height;
+    const ctx = dry.getContext('2d');
+
+    const base = {
+      pad: 100,
+      fontQuestion: 64,
+      fontReply: 56,
+      fontMeta: 34,
+      senderGap: 46,
+      dividerGap: 80,
+      replyGap: 88,
+      signatureGap: 58
+    };
+
+    for (let scale = 1; scale >= 0.62; scale -= 0.04) {
+      const layout = scaledStoryLayout(base, scale);
+      ctx.font = `${layout.fontQuestion}px Georgia, serif`;
+      let y = wrapText(ctx, note.message, layout.pad, 220, width - layout.pad * 2, layout.lineQuestion, { draw: false });
+      y += layout.senderGap;
+      const divY = y + layout.dividerGap;
+      ctx.font = `italic ${layout.fontReply}px Georgia, serif`;
+      const replyEnd = wrapText(ctx, note.reply, layout.pad, divY + layout.replyGap, width - layout.pad * 2, layout.lineReply, { draw: false });
+      if (replyEnd + layout.signatureGap + 90 <= height) return layout;
+    }
+
+    return scaledStoryLayout(base, 0.62);
+  }
+
+  function scaledStoryLayout(base, scale) {
+    const layout = {};
+    for (const [key, value] of Object.entries(base)) {
+      layout[key] = Math.round(value * scale);
+    }
+    layout.pad = Math.max(70, layout.pad);
+    layout.fontQuestion = Math.max(40, layout.fontQuestion);
+    layout.fontReply = Math.max(36, layout.fontReply);
+    layout.fontMeta = Math.max(25, layout.fontMeta);
+    layout.lineQuestion = Math.round(layout.fontQuestion * 1.38);
+    layout.lineReply = Math.round(layout.fontReply * 1.38);
+    return layout;
+  }
+
+  // Thai-safe word wrap with word segmentation and char-by-char fallback.
+  function wrapText(ctx, text, x, y, maxW, lineH, options = {}) {
+    const shouldDraw = options.draw !== false;
+    const tokens = tokenizeForWrap(text);
     let line = '';
     for (const token of tokens) {
-      const test = line ? line + ' ' + token : token;
+      if (!line && /^\s+$/.test(token)) continue;
+      const test = line + token;
       if (ctx.measureText(test).width <= maxW) {
         line = test;
       } else {
-        if (line) { ctx.fillText(line, x, y); y += lineH; line = token; }
-        else {
-          let cLine = '';
-          for (const ch of token) {
-            const ct = cLine + ch;
-            if (ctx.measureText(ct).width <= maxW) { cLine = ct; }
-            else { if (cLine) { ctx.fillText(cLine, x, y); y += lineH; } cLine = ch; }
-          }
-          line = cLine;
+        if (line) {
+          if (shouldDraw) ctx.fillText(line.trimEnd(), x, y);
+          y += lineH;
+          line = '';
         }
+        const split = splitTokenToLines(ctx, token.trimStart(), maxW);
+        while (split.length > 1) {
+          if (shouldDraw) ctx.fillText(split.shift().trimEnd(), x, y);
+          y += lineH;
+        }
+        line = split[0] || '';
       }
     }
-    if (line) { ctx.fillText(line, x, y); y += lineH; }
+    if (line) {
+      if (shouldDraw) ctx.fillText(line.trimEnd(), x, y);
+      y += lineH;
+    }
     return y;
+  }
+
+  function tokenizeForWrap(text) {
+    if (window.Intl && window.Intl.Segmenter) {
+      const segmenter = new window.Intl.Segmenter('th', { granularity: 'word' });
+      return Array.from(segmenter.segment(text))
+        .map(part => part.segment)
+        .filter(part => part.length);
+    }
+    return text.match(/\S+\s*/g) || [];
+  }
+
+  function splitTokenToLines(ctx, token, maxW) {
+    const lines = [];
+    let line = '';
+    for (const ch of Array.from(token)) {
+      const test = line + ch;
+      if (ctx.measureText(test).width <= maxW) {
+        line = test;
+      } else {
+        if (line) lines.push(line);
+        line = ch;
+      }
+    }
+    if (line) lines.push(line);
+    return lines.length ? lines : [''];
   }
 
   // ── View toggle ──
