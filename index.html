@@ -139,7 +139,7 @@
   <div class="header-left">
     <h1 class="site-title">Emailtional</h1>
     <p class="site-tagline">drop a question, a worry, or whatever's been sitting heavy. add your email — and we'll write back.</p>
-    <p class="site-tagline" style="margin-top:4px;">ฝากคำถาม ความกังวล หรืออะไรก็ตามที่หนักใจอยู่ ใส่ email ไว้ — แล้วฉันจะตอบกลับ :)</p>
+    <p class="site-tagline" style="margin-top:4px;">ฝากคำถาม ความกังวล หรืออะไรก็ตามที่หนักใจอยู่ ใส่ email ไว้ — แล้วเราจะตอบกลับ</p>
   </div>
   <div class="view-toggle">
     <button class="toggle-btn active" id="btnBoard">
@@ -416,10 +416,25 @@
 
     document.body.removeChild(el);
 
-    const link = document.createElement('a');
-    link.download = 'the-alignment-story.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    const dataUrl = canvas.toDataURL('image/png');
+
+    // iOS doesn't support download attribute — open in new tab instead
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      const w = window.open('', '_blank');
+      w.document.write(`<html><body style="margin:0;background:#000;">
+        <p style="color:#888;font-family:sans-serif;font-size:12px;text-align:center;padding:12px;">
+          hold the image → Save to Photos
+        </p>
+        <img src="${dataUrl}" style="width:100%;display:block;">
+      </body></html>`);
+      w.document.close();
+    } else {
+      const link = document.createElement('a');
+      link.download = 'the-alignment-story.png';
+      link.href = dataUrl;
+      link.click();
+    }
 
     btn.innerHTML = 'save as story &#x2193;';
   }
