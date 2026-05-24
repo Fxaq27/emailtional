@@ -140,9 +140,13 @@
         user-select: none;
         margin: 0 auto;
       }
-      /* gentle rotation alternating, no drag */
-      .board .card-wrap:nth-child(odd)  { transform: rotate(-1.5deg) !important; }
-      .board .card-wrap:nth-child(even) { transform: rotate(1.5deg) !important; }
+      /* natural scattered rotation — 6 pattern cycle */
+      .board .card-wrap:nth-child(6n+1) { transform: rotate(-2deg) !important; }
+      .board .card-wrap:nth-child(6n+2) { transform: rotate(1deg) !important; }
+      .board .card-wrap:nth-child(6n+3) { transform: rotate(-1.5deg) !important; }
+      .board .card-wrap:nth-child(6n+4) { transform: rotate(2deg) !important; }
+      .board .card-wrap:nth-child(6n+5) { transform: rotate(-0.5deg) !important; }
+      .board .card-wrap:nth-child(6n+6) { transform: rotate(1.5deg) !important; }
       .board .card-face { cursor: pointer; touch-action: auto; }
       .write-btn { right: 16px; bottom: 20px; }
       .form-row { grid-template-columns: 1fr; }
@@ -428,95 +432,123 @@
     const btn = document.getElementById('saveStoryBtn');
     btn.textContent = 'generating...';
 
-    // Pure Canvas API — no html2canvas, works on mobile
-    const W = 1080, H = 1920, PAD = 100;
+    const W = 1080, PAD = 100, FQ = 66, FR = 58;
+    const LHQ = FQ * 1.38, LHR = FR * 1.38;
+
+    // ── Measure content height first ──
+    const measure = document.createElement('canvas');
+    measure.width = W;
+    const mCtx = measure.getContext('2d');
+
+    mCtx.font = `${FQ}px Georgia, serif`;
+    const qLines = countLines(mCtx, note.message, W - PAD * 2);
+    const qH = qLines * LHQ;
+
+    mCtx.font = `italic ${FR}px Georgia, serif`;
+    const rLines = countLines(mCtx, note.reply, W - PAD * 2);
+    const rH = rLines * LHR;
+
+    // Build total canvas height from content
+    const labelTop   = 160;
+    const qStart     = 220;
+    const senderH    = 86;
+    const dividerGap = 90;
+    const rStartOff  = 90;
+    const sigH       = 80;
+    const bottomPad  = 120;
+
+    const H = qStart + qH + senderH + dividerGap + rStartOff + rH + sigH + bottomPad;
+
+    // ── Draw ──
     const cv = document.createElement('canvas');
-    cv.width = W; cv.height = H;
+    cv.width = W; cv.height = Math.max(H, 1200);
     const ctx = cv.getContext('2d');
 
-    // Background
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, cv.width, cv.height);
 
     // Label
-    ctx.fillStyle = 'rgba(28,28,28,0.32)';
-    ctx.font = '500 30px Arial, sans-serif';
-    ctx.fillText('THE ALIGNMENT', PAD, 160);
+    ctx.fillStyle = 'rgba(28,28,28,0.3)';
+    ctx.font = '28px Arial, sans-serif';
+    ctx.fillText('THE ALIGNMENT', PAD, labelTop);
 
-    // Question text
+    // Question
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = '68px Georgia, serif';
-    let y = drawWrapped(ctx, note.message, PAD, 280, W - PAD * 2, 86);
+    ctx.font = `${FQ}px Georgia, serif`;
+    let y = drawWrapped(ctx, note.message, PAD, qStart, W - PAD * 2, LHQ);
 
     // Sender
-    ctx.fillStyle = 'rgba(28,28,28,0.42)';
-    ctx.font = '38px Georgia, serif';
-    y += 48;
+    ctx.fillStyle = 'rgba(28,28,28,0.4)';
+    ctx.font = '36px Georgia, serif';
+    y += 46;
     ctx.fillText(`— ${note.sender_name}`, PAD, y);
 
     // Divider
-    const divY = Math.max(y + 100, 940);
-    ctx.strokeStyle = 'rgba(28,28,28,0.14)';
+    const divY = y + dividerGap;
+    ctx.strokeStyle = 'rgba(28,28,28,0.13)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(PAD, divY);
     ctx.lineTo(W - PAD, divY);
     ctx.stroke();
 
-    // Reply text — auto-shrink font if long
-    const replySpace = H - divY - 200; // space available for reply + sig
-    const replyFontSize = calcFontSize(ctx, note.reply, W - PAD * 2, replySpace, 60, 32);
-    ctx.fillStyle = 'rgba(28,28,28,0.72)';
-    ctx.font = `italic ${replyFontSize}px Georgia, serif`;
-    let y2 = drawWrapped(ctx, note.reply, PAD, divY + 90, W - PAD * 2, replyFontSize * 1.35);
+    // Reply
+    ctx.fillStyle = 'rgba(28,28,28,0.7)';
+    ctx.font = `italic ${FR}px Georgia, serif`;
+    let y2 = drawWrapped(ctx, note.reply, PAD, divY + rStartOff, W - PAD * 2, LHR);
 
     // Signature
-    ctx.fillStyle = 'rgba(28,28,28,0.38)';
-    ctx.font = `${Math.min(38, replyFontSize)}px Georgia, serif`;
-    ctx.fillText('— The Alignment', PAD, Math.min(y2 + 60, H - 80));
+    ctx.fillStyle = 'rgba(28,28,28,0.35)';
+    ctx.font = '36px Georgia, serif';
+    ctx.fillText('— The Alignment', PAD, y2 + 58);
 
     const dataUrl = cv.toDataURL('image/png');
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
     if (isMobile) {
       document.getElementById('storyImg').src = dataUrl;
       document.getElementById('storyOverlay').classList.add('open');
     } else {
       const a = document.createElement('a');
       a.download = 'the-alignment-story.png';
-      a.href = dataUrl;
-      a.click();
+      a.href = dataUrl; a.click();
     }
-    btn.innerHTML = 'save as story &#x2193;';
+    btn.innerHTML = 'save as story ↓';
   }
 
+  // Thai-safe word wrap — falls back to char-by-char for long tokens
   function drawWrapped(ctx, text, x, y, maxW, lineH) {
-    const words = text.split(' ');
+    const tokens = text.split(' ');
     let line = '';
-    for (const w of words) {
-      const test = line + w + ' ';
-      if (ctx.measureText(test).width > maxW && line) {
-        ctx.fillText(line.trim(), x, y);
-        line = w + ' '; y += lineH;
-      } else { line = test; }
+    for (const token of tokens) {
+      const test = line ? line + ' ' + token : token;
+      if (ctx.measureText(test).width <= maxW) {
+        line = test;
+      } else {
+        if (line) { ctx.fillText(line, x, y); y += lineH; line = token; }
+        else {
+          // single token too wide — break by character
+          let cLine = '';
+          for (const ch of token) {
+            const ct = cLine + ch;
+            if (ctx.measureText(ct).width <= maxW) { cLine = ct; }
+            else { ctx.fillText(cLine, x, y); y += lineH; cLine = ch; }
+          }
+          line = cLine;
+        }
+      }
     }
-    if (line.trim()) ctx.fillText(line.trim(), x, y);
+    if (line) { ctx.fillText(line, x, y); y += lineH; }
     return y;
   }
 
-  function calcFontSize(ctx, text, maxW, maxH, startSize, minSize) {
-    for (let fs = startSize; fs >= minSize; fs -= 4) {
-      ctx.font = `italic ${fs}px Georgia, serif`;
-      const lineH = fs * 1.35;
-      let lines = 1, line = '';
-      for (const w of text.split(' ')) {
-        const test = line + w + ' ';
-        if (ctx.measureText(test).width > maxW && line) { lines++; line = w + ' '; }
-        else line = test;
-      }
-      if (lines * lineH + fs + 60 <= maxH) return fs;
+  function countLines(ctx, text, maxW) {
+    let lines = 1, line = '';
+    for (const token of text.split(' ')) {
+      const test = line ? line + ' ' + token : token;
+      if (ctx.measureText(test).width > maxW && line) { lines++; line = token; }
+      else line = test;
     }
-    return minSize;
+    return lines;
   }
 
   // ── View toggle ──
