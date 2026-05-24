@@ -432,60 +432,60 @@
     const btn = document.getElementById('saveStoryBtn');
     btn.textContent = 'generating...';
 
-    const W = 1080, PAD = 100, FQ = 66, FR = 58;
-    const LHQ = FQ * 1.38, LHR = FR * 1.38;
+    const W   = 1080;
+    const PAD = 100;
+    const FQ  = 64;   // question font size
+    const FR  = 56;   // reply font size
+    const LHQ = Math.round(FQ * 1.4);
+    const LHR = Math.round(FR * 1.4);
+    const BOTTOM_PAD = 140;
 
-    // ── Measure content height first ──
-    const measure = document.createElement('canvas');
-    measure.width = W;
-    const mCtx = measure.getContext('2d');
+    // ── Step 1: dry-run on tall canvas to get exact final y ──
+    const dry = document.createElement('canvas');
+    dry.width = W; dry.height = 9999;
+    const dCtx = dry.getContext('2d');
 
-    mCtx.font = `${FQ}px Georgia, serif`;
-    const qLines = countLines(mCtx, note.message, W - PAD * 2);
-    const qH = qLines * LHQ;
+    dCtx.font = `${FQ}px Georgia, serif`;
+    let dy = 220;
+    dy = wrapText(dCtx, note.message, PAD, dy, W - PAD * 2, LHQ);
+    dy += 50; // sender
+    dy += 90; // divider gap
+    dy += 90; // reply start
+    dCtx.font = `italic ${FR}px Georgia, serif`;
+    dy = wrapText(dCtx, note.reply, PAD, dy, W - PAD * 2, LHR);
+    dy += 70;  // signature line
+    dy += BOTTOM_PAD;
 
-    mCtx.font = `italic ${FR}px Georgia, serif`;
-    const rLines = countLines(mCtx, note.reply, W - PAD * 2);
-    const rH = rLines * LHR;
+    const H = Math.ceil(dy);
 
-    // Build total canvas height from content
-    const labelTop   = 160;
-    const qStart     = 220;
-    const senderH    = 86;
-    const dividerGap = 90;
-    const rStartOff  = 90;
-    const sigH       = 80;
-    const bottomPad  = 120;
-
-    const H = qStart + qH + senderH + dividerGap + rStartOff + rH + sigH + bottomPad;
-
-    // ── Draw ──
-    const cv = document.createElement('canvas');
-    cv.width = W; cv.height = Math.max(H, 1200);
+    // ── Step 2: draw on correctly-sized canvas ──
+    const cv  = document.createElement('canvas');
+    cv.width  = W;
+    cv.height = H;
     const ctx = cv.getContext('2d');
 
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillRect(0, 0, W, H);
 
     // Label
-    ctx.fillStyle = 'rgba(28,28,28,0.3)';
+    ctx.fillStyle = 'rgba(28,28,28,0.28)';
     ctx.font = '28px Arial, sans-serif';
-    ctx.fillText('THE ALIGNMENT', PAD, labelTop);
+    ctx.fillText('THE ALIGNMENT', PAD, 155);
 
     // Question
     ctx.fillStyle = '#1a1a1a';
     ctx.font = `${FQ}px Georgia, serif`;
-    let y = drawWrapped(ctx, note.message, PAD, qStart, W - PAD * 2, LHQ);
+    let y = wrapText(ctx, note.message, PAD, 220, W - PAD * 2, LHQ);
 
     // Sender
-    ctx.fillStyle = 'rgba(28,28,28,0.4)';
-    ctx.font = '36px Georgia, serif';
+    ctx.fillStyle = 'rgba(28,28,28,0.38)';
+    ctx.font = '34px Georgia, serif';
     y += 46;
     ctx.fillText(`— ${note.sender_name}`, PAD, y);
 
     // Divider
-    const divY = y + dividerGap;
-    ctx.strokeStyle = 'rgba(28,28,28,0.13)';
+    const divY = y + 80;
+    ctx.strokeStyle = 'rgba(28,28,28,0.12)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(PAD, divY);
@@ -493,13 +493,13 @@
     ctx.stroke();
 
     // Reply
-    ctx.fillStyle = 'rgba(28,28,28,0.7)';
+    ctx.fillStyle = 'rgba(28,28,28,0.68)';
     ctx.font = `italic ${FR}px Georgia, serif`;
-    let y2 = drawWrapped(ctx, note.reply, PAD, divY + rStartOff, W - PAD * 2, LHR);
+    let y2 = wrapText(ctx, note.reply, PAD, divY + 88, W - PAD * 2, LHR);
 
     // Signature
-    ctx.fillStyle = 'rgba(28,28,28,0.35)';
-    ctx.font = '36px Georgia, serif';
+    ctx.fillStyle = 'rgba(28,28,28,0.32)';
+    ctx.font = '34px Georgia, serif';
     ctx.fillText('— The Alignment', PAD, y2 + 58);
 
     const dataUrl = cv.toDataURL('image/png');
@@ -515,8 +515,8 @@
     btn.innerHTML = 'save as story ↓';
   }
 
-  // Thai-safe word wrap — falls back to char-by-char for long tokens
-  function drawWrapped(ctx, text, x, y, maxW, lineH) {
+  // Thai-safe word wrap with char-by-char fallback
+  function wrapText(ctx, text, x, y, maxW, lineH) {
     const tokens = text.split(' ');
     let line = '';
     for (const token of tokens) {
@@ -526,12 +526,11 @@
       } else {
         if (line) { ctx.fillText(line, x, y); y += lineH; line = token; }
         else {
-          // single token too wide — break by character
           let cLine = '';
           for (const ch of token) {
             const ct = cLine + ch;
             if (ctx.measureText(ct).width <= maxW) { cLine = ct; }
-            else { ctx.fillText(cLine, x, y); y += lineH; cLine = ch; }
+            else { if (cLine) { ctx.fillText(cLine, x, y); y += lineH; } cLine = ch; }
           }
           line = cLine;
         }
@@ -539,16 +538,6 @@
     }
     if (line) { ctx.fillText(line, x, y); y += lineH; }
     return y;
-  }
-
-  function countLines(ctx, text, maxW) {
-    let lines = 1, line = '';
-    for (const token of text.split(' ')) {
-      const test = line ? line + ' ' + token : token;
-      if (ctx.measureText(test).width > maxW && line) { lines++; line = token; }
-      else line = test;
-    }
-    return lines;
   }
 
   // ── View toggle ──
