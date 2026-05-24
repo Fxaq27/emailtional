@@ -134,14 +134,16 @@
       .board .card-wrap {
         position: relative !important;
         left: auto !important; top: auto !important;
-        width: 88% !important;
-        transform: none !important;
+        width: 85% !important;
         cursor: pointer !important;
         touch-action: auto !important;
         user-select: none;
         margin: 0 auto;
       }
-      .board .card-face { cursor: pointer; }
+      /* gentle rotation alternating, no drag */
+      .board .card-wrap:nth-child(odd)  { transform: rotate(-1.5deg) !important; }
+      .board .card-wrap:nth-child(even) { transform: rotate(1.5deg) !important; }
+      .board .card-face { cursor: pointer; touch-action: auto; }
       .write-btn { right: 16px; bottom: 20px; }
       .form-row { grid-template-columns: 1fr; }
       .form-card { padding: 28px 22px 24px; }
@@ -461,15 +463,17 @@
     ctx.lineTo(W - PAD, divY);
     ctx.stroke();
 
-    // Reply text
+    // Reply text — auto-shrink font if long
+    const replySpace = H - divY - 200; // space available for reply + sig
+    const replyFontSize = calcFontSize(ctx, note.reply, W - PAD * 2, replySpace, 60, 32);
     ctx.fillStyle = 'rgba(28,28,28,0.72)';
-    ctx.font = 'italic 60px Georgia, serif';
-    let y2 = drawWrapped(ctx, note.reply, PAD, divY + 90, W - PAD * 2, 78);
+    ctx.font = `italic ${replyFontSize}px Georgia, serif`;
+    let y2 = drawWrapped(ctx, note.reply, PAD, divY + 90, W - PAD * 2, replyFontSize * 1.35);
 
     // Signature
     ctx.fillStyle = 'rgba(28,28,28,0.38)';
-    ctx.font = '38px Georgia, serif';
-    ctx.fillText('— The Alignment', PAD, y2 + 60);
+    ctx.font = `${Math.min(38, replyFontSize)}px Georgia, serif`;
+    ctx.fillText('— The Alignment', PAD, Math.min(y2 + 60, H - 80));
 
     const dataUrl = cv.toDataURL('image/png');
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -498,6 +502,21 @@
     }
     if (line.trim()) ctx.fillText(line.trim(), x, y);
     return y;
+  }
+
+  function calcFontSize(ctx, text, maxW, maxH, startSize, minSize) {
+    for (let fs = startSize; fs >= minSize; fs -= 4) {
+      ctx.font = `italic ${fs}px Georgia, serif`;
+      const lineH = fs * 1.35;
+      let lines = 1, line = '';
+      for (const w of text.split(' ')) {
+        const test = line + w + ' ';
+        if (ctx.measureText(test).width > maxW && line) { lines++; line = w + ' '; }
+        else line = test;
+      }
+      if (lines * lineH + fs + 60 <= maxH) return fs;
+    }
+    return minSize;
   }
 
   // ── View toggle ──
