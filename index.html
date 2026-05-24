@@ -125,11 +125,34 @@
       .site-header { padding: 36px 5vw 0; flex-direction: column; align-items: flex-start; }
       .view-toggle { align-self: flex-start; }
       .board { display: grid !important; grid-template-columns: 1fr !important; gap: 14px !important; padding: 28px 5vw 120px !important; min-height: unset !important; }
-      .board .card-wrap { position: relative !important; left: auto !important; top: auto !important; width: 100% !important; transform: rotate(var(--rot)) !important; cursor: pointer !important; }
-      .board.read-mode .card-wrap { transform: none !important; }
+      .board .card-wrap {
+        position: relative !important; left: auto !important; top: auto !important;
+        width: 100% !important; transform: none !important; cursor: pointer !important;
+        touch-action: auto !important;  /* ← fix scroll */
+      }
       .write-btn { right: 16px; bottom: 20px; }
       .form-row { grid-template-columns: 1fr; }
       .form-card { padding: 28px 22px 24px; }
+    }
+
+    /* Save story overlay (mobile) */
+    .story-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+      z-index: 2000; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 20px; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .story-overlay.open { opacity: 1; pointer-events: all; }
+    .story-overlay img { max-width: 100%; max-height: 75dvh; border-radius: 3px; }
+    .story-hint {
+      font-family: 'Outfit', sans-serif; font-size: 12px; color: #666;
+      letter-spacing: 0.05em; margin-top: 16px; text-align: center;
+    }
+    .story-close {
+      position: absolute; top: 20px; right: 20px;
+      background: none; border: none; color: #555; font-size: 24px;
+      cursor: pointer; line-height: 1;
     }
   </style>
 </head>
@@ -156,6 +179,13 @@
 <main class="board" id="board"></main>
 
 <button class="write-btn" id="writeBtn">write a note &#x2197;</button>
+
+<!-- Story overlay -->
+<div class="story-overlay" id="storyOverlay">
+  <button class="story-close" id="storyClose">&#x2715;</button>
+  <img id="storyImg" src="" alt="story">
+  <p class="story-hint">hold the image → Save to Photos</p>
+</div>
 
 <!-- Note modal -->
 <div class="note-modal" id="noteModal">
@@ -364,6 +394,11 @@
     noteModal.classList.add('open');
   }
 
+  // Story overlay close
+  document.getElementById('storyClose').addEventListener('click', () => {
+    document.getElementById('storyOverlay').classList.remove('open');
+  });
+
   const closeModal = () => noteModal.classList.remove('open');
   noteModalClose.addEventListener('click', closeModal);
   noteModalBg.addEventListener('click', closeModal);
@@ -417,18 +452,13 @@
     document.body.removeChild(el);
 
     const dataUrl = canvas.toDataURL('image/png');
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // iOS doesn't support download attribute — open in new tab instead
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
-      const w = window.open('', '_blank');
-      w.document.write(`<html><body style="margin:0;background:#000;">
-        <p style="color:#888;font-family:sans-serif;font-size:12px;text-align:center;padding:12px;">
-          hold the image → Save to Photos
-        </p>
-        <img src="${dataUrl}" style="width:100%;display:block;">
-      </body></html>`);
-      w.document.close();
+    if (isMobile) {
+      // Show in overlay — user long-presses to save
+      const overlay = document.getElementById('storyOverlay');
+      document.getElementById('storyImg').src = dataUrl;
+      overlay.classList.add('open');
     } else {
       const link = document.createElement('a');
       link.download = 'the-alignment-story.png';
