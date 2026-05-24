@@ -124,12 +124,24 @@
     @media (max-width: 600px) {
       .site-header { padding: 36px 5vw 0; flex-direction: column; align-items: flex-start; }
       .view-toggle { align-self: flex-start; }
-      .board { display: grid !important; grid-template-columns: 1fr !important; gap: 14px !important; padding: 28px 5vw 120px !important; min-height: unset !important; }
-      .board .card-wrap {
-        position: relative !important; left: auto !important; top: auto !important;
-        width: 100% !important; transform: none !important; cursor: pointer !important;
-        touch-action: auto !important;  /* ← fix scroll */
+      .board {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+        padding: 28px 6vw 120px !important;
+        min-height: unset !important;
       }
+      .board .card-wrap {
+        position: relative !important;
+        left: auto !important; top: auto !important;
+        width: 88% !important;
+        transform: none !important;
+        cursor: pointer !important;
+        touch-action: auto !important;
+        user-select: none;
+        margin: 0 auto;
+      }
+      .board .card-face { cursor: pointer; }
       .write-btn { right: 16px; bottom: 20px; }
       .form-row { grid-template-columns: 1fr; }
       .form-card { padding: 28px 22px 24px; }
@@ -342,6 +354,7 @@
 
   function dragStart(e) {
     if (isReadMode) return;
+    if (window.innerWidth <= 600) return; // disable drag on mobile
     const wrap = e.target.closest('.card-wrap');
     if (!wrap) return;
     const p = ptr(e);
@@ -409,64 +422,82 @@
 
   document.getElementById('saveStoryBtn').addEventListener('click', () => saveStory(_currentNote, _currentBg));
 
-  async function saveStory(note, bg) {
+  function saveStory(note, bg) {
     const btn = document.getElementById('saveStoryBtn');
     btn.textContent = 'generating...';
 
-    const el = document.createElement('div');
-    el.style.cssText = `position:fixed;left:-9999px;top:0;width:540px;height:960px;
-      background:${bg};padding:64px 58px;display:flex;flex-direction:column;
-      box-sizing:border-box;font-family:'Caveat',cursive;`;
+    // Pure Canvas API — no html2canvas, works on mobile
+    const W = 1080, H = 1920, PAD = 100;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
 
-    el.innerHTML = `
-      <div style="font-family:'Outfit',sans-serif;font-size:11px;text-transform:uppercase;
-        letter-spacing:0.16em;color:rgba(28,28,28,0.35);margin-bottom:48px;">
-        The Alignment
-      </div>
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:40px;min-height:0;">
-        <div>
-          <p style="font-size:36px;line-height:1.45;color:#1a1a1a;margin:0 0 14px;
-            font-family:'Caveat',cursive;">${escHtml(note.message)}</p>
-          <p style="font-size:20px;color:rgba(28,28,28,0.42);margin:0;
-            font-family:'Caveat',cursive;">— ${escHtml(note.sender_name)}</p>
-        </div>
-        <div style="height:1px;background:rgba(28,28,28,0.14);flex-shrink:0;"></div>
-        <div>
-          <p style="font-size:32px;font-style:italic;line-height:1.5;
-            color:rgba(28,28,28,0.78);margin:0 0 16px;
-            font-family:'Caveat',cursive;">${escHtml(note.reply)}</p>
-          <p style="font-size:20px;color:rgba(28,28,28,0.42);margin:0;
-            font-family:'Caveat',cursive;">— The Alignment</p>
-        </div>
-      </div>
-    `;
+    // Background
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
 
-    document.body.appendChild(el);
-    await document.fonts.ready;
+    // Label
+    ctx.fillStyle = 'rgba(28,28,28,0.32)';
+    ctx.font = '500 30px Arial, sans-serif';
+    ctx.fillText('THE ALIGNMENT', PAD, 160);
 
-    const canvas = await html2canvas(el, {
-      scale: 2, useCORS: true, logging: false,
-      width: 540, height: 960, backgroundColor: null,
-    });
+    // Question text
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = '68px Georgia, serif';
+    let y = drawWrapped(ctx, note.message, PAD, 280, W - PAD * 2, 86);
 
-    document.body.removeChild(el);
+    // Sender
+    ctx.fillStyle = 'rgba(28,28,28,0.42)';
+    ctx.font = '38px Georgia, serif';
+    y += 48;
+    ctx.fillText(`— ${note.sender_name}`, PAD, y);
 
-    const dataUrl = canvas.toDataURL('image/png');
+    // Divider
+    const divY = Math.max(y + 100, 940);
+    ctx.strokeStyle = 'rgba(28,28,28,0.14)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(PAD, divY);
+    ctx.lineTo(W - PAD, divY);
+    ctx.stroke();
+
+    // Reply text
+    ctx.fillStyle = 'rgba(28,28,28,0.72)';
+    ctx.font = 'italic 60px Georgia, serif';
+    let y2 = drawWrapped(ctx, note.reply, PAD, divY + 90, W - PAD * 2, 78);
+
+    // Signature
+    ctx.fillStyle = 'rgba(28,28,28,0.38)';
+    ctx.font = '38px Georgia, serif';
+    ctx.fillText('— The Alignment', PAD, y2 + 60);
+
+    const dataUrl = cv.toDataURL('image/png');
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     if (isMobile) {
-      // Show in overlay — user long-presses to save
-      const overlay = document.getElementById('storyOverlay');
       document.getElementById('storyImg').src = dataUrl;
-      overlay.classList.add('open');
+      document.getElementById('storyOverlay').classList.add('open');
     } else {
-      const link = document.createElement('a');
-      link.download = 'the-alignment-story.png';
-      link.href = dataUrl;
-      link.click();
+      const a = document.createElement('a');
+      a.download = 'the-alignment-story.png';
+      a.href = dataUrl;
+      a.click();
     }
-
     btn.innerHTML = 'save as story &#x2193;';
+  }
+
+  function drawWrapped(ctx, text, x, y, maxW, lineH) {
+    const words = text.split(' ');
+    let line = '';
+    for (const w of words) {
+      const test = line + w + ' ';
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line.trim(), x, y);
+        line = w + ' '; y += lineH;
+      } else { line = test; }
+    }
+    if (line.trim()) ctx.fillText(line.trim(), x, y);
+    return y;
   }
 
   // ── View toggle ──
